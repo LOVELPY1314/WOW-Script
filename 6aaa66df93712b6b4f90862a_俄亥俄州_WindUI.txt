@@ -1,4 +1,91 @@
+
 do
+local LogService = game:GetService("LogService")
+local StarterGui = game:GetService("StarterGui")
+
+local errorLogs = {}
+local cooldown = {}
+local COOLDOWN = 3
+
+local fixes = {
+	{ pattern = "attempt to index nil", source = "空值索引", fix = "对象或变量为 nil", advice = "使用前加 if x then 判断，或用 :WaitForChild() 等待" },
+	{ pattern = "attempt to index a nil value", source = "空值索引", fix = "对象或变量为 nil", advice = "使用前加 if x then 判断，或用 :WaitForChild() 等待" },
+	{ pattern = "attempt to call a nil", source = "空值调用", fix = "函数不存在或为 nil", advice = "检查函数名拼写，确认模块已加载" },
+	{ pattern = "attempt to concatenate", source = "类型错误", fix = "对不兼容类型使用 .. 拼接", advice = "用 tostring() 转换后再拼接" },
+	{ pattern = "attempt to perform arithmetic", source = "算数错误", fix = "对 nil 或不兼容类型做运算", advice = "运算前用 tonumber() 或给默认值 0" },
+	{ pattern = "attempt to compare", source = "比较错误", fix = "比较了不兼容的类型", advice = "确保两边类型一致，必要时用 tonumber()" },
+	{ pattern = "unexpected symbol", source = "语法错误", fix = "代码有非法符号", advice = "检查报错行附近是否拼写错误或多写符号" },
+	{ pattern = "')' expected", source = "语法错误", fix = "缺少右括号", advice = "补全缺失的 )" },
+	{ pattern = "']' expected", source = "语法错误", fix = "缺少右方括号", advice = "补全缺失的 ]" },
+	{ pattern = "'end' expected", source = "语法错误", fix = "缺少 end", advice = "补全 if/for/while/function 的 end" },
+	{ pattern = "script timeout", source = "死循环", fix = "脚本执行时间超限", advice = "在循环里加 task.wait() 让出线程" },
+	{ pattern = "stack overflow", source = "栈溢出", fix = "递归过深或无限递归", advice = "检查递归终止条件，或改用迭代" },
+	{ pattern = "HTTP requests are not enabled", source = "HTTP 未开启", fix = "HttpService 未启用", advice = "在游戏设置里开启 HttpEnabled" },
+	{ pattern = "Unable to cast", source = "类型转换失败", fix = "属性类型不匹配", advice = "检查赋值的类型是否正确" },
+	{ pattern = "not a valid member", source = "成员不存在", fix = "访问了对象不存在的属性/子项", advice = "用 FindFirstChild 替代点访问并做 nil 判断" },
+	{ pattern = "Unknown global", source = "未定义全局变量", fix = "使用了未声明的全局变量", advice = "先定义变量再使用，或加 local" },
+	{ pattern = "too many arguments", source = "参数过多", fix = "调用函数时传参数量超出", advice = "检查函数定义和调用的参数数量" },
+	{ pattern = "missing argument", source = "参数缺失", fix = "调用函数时缺少参数", advice = "补全函数所需参数" },
+}
+
+local function getFix(msg)
+	for _, v in ipairs(fixes) do
+		if msg:find(v.pattern, 1, true) then
+			return v
+		end
+	end
+	return {
+		source = "未知来源",
+		fix = "未能自动识别错误类型",
+		advice = "请根据报错堆栈手动排查，常见原因: nil 值访问、拼写错误、类型不匹配",
+	}
+end
+
+local function showNotify(text)
+	pcall(function()
+		StarterGui:SetCore("SendNotification", {
+			Title = "Log",
+			Text = text,
+			Duration = 8,
+		})
+	end)
+end
+
+local function handleError(msg)
+	if type(msg) ~= "string" then
+		return
+	end
+	msg = msg:gsub("\n", " "):gsub("%s+", " ")
+	local key = msg:sub(1, 80)
+	local now = os.clock()
+	if cooldown[key] and now - cooldown[key] < COOLDOWN then
+		return
+	end
+	cooldown[key] = now
+
+	table.insert(errorLogs, msg)
+	if #errorLogs > 20 then
+		table.remove(errorLogs, 1)
+	end
+
+	local lines = {}
+	for i, m in ipairs(errorLogs) do
+		local info = getFix(m)
+		table.insert(lines, string.format("[%d] 报错信息: %s 来源: %s 修复方法: %s 建议: %s", i, m, info.source, info.fix, info.advice))
+	end
+	local fullText = table.concat(lines, "\n")
+
+	showNotify(fullText)
+	pcall(function()
+		setclipboard(fullText)
+	end)
+end
+
+LogService.MessageOut:Connect(function(message, messageType)
+	if messageType == Enum.MessageType.MessageError then
+		handleError(message)
+	end
+end)
 local Http = http_request or request or HttpPost or syn.request
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -122,7 +209,6 @@ if ConfigManager then
     end)
 end
 
-loadstring(game:HttpGet("https://panel.atlasteam.live/sdk/1.lua", true))()
 Players = game:GetService("Players")
 ReplicatedStorage = game:GetService("ReplicatedStorage")
 Workspace = game:GetService("Workspace")
@@ -3655,6 +3741,7 @@ function EquipAccessoryOnCharacter(char, name)
 end
 
 end
+
 do
 	getgenv().AutoPickComponent = false
 getgenv().AutoPickTreasure = false
@@ -4820,9 +4907,1422 @@ AimTab:Dropdown({
 			end
 		end
 })
+EditorTab = Window:Tab({ Title = T("键位UIEDIT", "UI Editor"), Icon = "crown" })
 
+do
+	local RunService = game:GetService("RunService")
+	local UIS = game:GetService("UserInputService")
+	local HttpService = game:GetService("HttpService")
+	local MarketplaceService = game:GetService("MarketplaceService")
+	local PlayerGui = LP:WaitForChild("PlayerGui")
+
+	local TargetParent = PlayerGui
+	pcall(function()
+		if gethui and gethui() then TargetParent = gethui()
+		elseif CoreGui then TargetParent = CoreGui end
+	end)
+
+	pcall(function()
+		for _, v in pairs(TargetParent:GetChildren()) do
+			if v.Name == "PerfectUIManager_Shield" or v.Name == "PerfectUIManager_UI" then v:Destroy() end
+		end
+		RunService:UnbindFromRenderStep("OmniTracker_Enforce")
+	end)
+
+	local EditModeActive, SelectedElement = false, nil
+	local SelectedCluster = {}
+	local RuleMap = {}
+	local KnownTrackedObjects = {}
+	local isMenuLocked = false
+	local Connections = {}
+	local isDraggingElement = false
+	local OriginalPositions, OriginalSizes = {}, {}
+	local EditorToggleRef
+
+	local IGNORE_NAMES = {
+		windui = true,
+		wind_ui = true,
+		perfectuimanager_ui = true,
+		perfectuimanager_shield = true,
+	}
+
+	local function isIgnoredUI(obj)
+		local cur, depth = obj, 0
+		while cur and cur ~= PlayerGui and depth < 12 do
+			depth += 1
+			local n = string.lower(cur.Name)
+			if IGNORE_NAMES[n] then return true end
+			if n:find("windui") or n:find("wind_ui") then return true end
+			cur = cur.Parent
+		end
+		return false
+	end
+
+	local function GetKey(obj)
+		local keyStr = obj.Name
+		local trait = ""
+		if obj.Name == "ContextActionButton" then
+			local title = obj:FindFirstChild("ActionTitle")
+			if title and title:IsA("TextLabel") and title.Text ~= "" then
+				keyStr = "CAB_" .. title.Text
+			else
+				local icon = obj:FindFirstChild("ActionIcon")
+				if icon and icon:IsA("ImageLabel") and icon.Image ~= "" then
+					keyStr = "CAB_IMG_" .. (string.match(icon.Image, "%d+") or "ICO")
+				end
+			end
+		else
+			if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+				if obj.Text ~= "" then trait = trait .. "_" .. string.sub(obj.Text, 1, 16) end
+			elseif obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
+				if obj.Image ~= "" then
+					local id = string.match(obj.Image, "%d+")
+					if id then trait = trait .. "_IMG" .. id end
+				end
+			end
+		end
+		trait = trait .. "_" .. math.floor(obj.AbsoluteSize.X) .. "x" .. math.floor(obj.AbsoluteSize.Y)
+		local parentName = obj.Parent and obj.Parent.Name or "ROOT"
+		return parentName .. "_" .. keyStr .. trait
+	end
+
+	local function GetSafeVisualPosition(gui)
+		local parent = gui.Parent
+		if parent and parent:IsA("GuiObject") then
+			local pX, pY = parent.AbsolutePosition.X, parent.AbsolutePosition.Y
+			if parent:IsA("ScrollingFrame") then
+				pX = pX - parent.CanvasPosition.X
+				pY = pY - parent.CanvasPosition.Y
+			end
+			local aX, aY = gui.AnchorPoint.X, gui.AnchorPoint.Y
+			local w, h = gui.AbsoluteSize.X, gui.AbsoluteSize.Y
+			local dX, dY = gui.AbsolutePosition.X, gui.AbsolutePosition.Y
+			return UDim2.new(0, (dX - pX) + (aX * w), 0, (dY - pY) + (aY * h))
+		end
+		return gui.Position
+	end
+
+	local ShieldGui = Instance.new("ScreenGui")
+	ShieldGui.Name = "PerfectUIManager_Shield"
+	ShieldGui.ResetOnSpawn = false
+	ShieldGui.DisplayOrder = 99998
+	ShieldGui.Parent = TargetParent
+
+	local TapShield = Instance.new("TextButton")
+	TapShield.Size = UDim2.new(1, 0, 1, 0)
+	TapShield.BackgroundTransparency = 1
+	TapShield.Text = ""
+	TapShield.Active = false
+	TapShield.Visible = false
+	TapShield.Parent = ShieldGui
+
+	local EditorGui = Instance.new("ScreenGui")
+	EditorGui.Name = "PerfectUIManager_UI"
+	EditorGui.ResetOnSpawn = false
+	EditorGui.DisplayOrder = 99999
+	EditorGui.Parent = TargetParent
+
+	local function ScanSingleObject(obj)
+		if not obj:IsA("GuiObject") then return end
+		if obj:IsDescendantOf(EditorGui) or obj:IsDescendantOf(ShieldGui) then return end
+		if isIgnoredUI(obj) then return end
+		local key = GetKey(obj)
+		if RuleMap[key] then KnownTrackedObjects[obj] = key end
+	end
+
+	local function ForceScanUI()
+		pcall(function()
+			for _, obj in ipairs(PlayerGui:GetDescendants()) do ScanSingleObject(obj) end
+			if TargetParent ~= PlayerGui and TargetParent.GetDescendants then
+				for _, obj in ipairs(TargetParent:GetDescendants()) do ScanSingleObject(obj) end
+			end
+		end)
+	end
+
+	table.insert(Connections, PlayerGui.DescendantAdded:Connect(function(obj)
+		if not next(RuleMap) then return end
+		task.defer(function() ScanSingleObject(obj) end)
+	end))
+
+	local function CreateCorner(parent, radius)
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = (radius == "100%") and UDim.new(1, 0) or UDim.new(0, radius)
+		corner.Parent = parent
+	end
+
+	local function MakeDraggable(gui, isActionPopup)
+		local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
+		gui.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+				if isActionPopup and isMenuLocked then return end
+				dragging = true; dragInput = input; dragStart = input.Position; startPos = gui.Position
+			end
+		end)
+		table.insert(Connections, UIS.InputChanged:Connect(function(input)
+			if input == dragInput and dragging then
+				local delta = input.Position - dragStart
+				gui.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+			end
+		end))
+		table.insert(Connections, UIS.InputEnded:Connect(function(input)
+			if input == dragInput then dragging = false; dragInput = nil end
+		end))
+	end
+
+	local ConfirmPopup = Instance.new("Frame")
+	ConfirmPopup.Size = UDim2.new(0, 260, 0, 120)
+	ConfirmPopup.Position = UDim2.new(0.5, -130, 0.5, -60)
+	ConfirmPopup.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+	ConfirmPopup.Visible = false
+	ConfirmPopup.ZIndex = 9999999
+	ConfirmPopup.Active = true
+	ConfirmPopup.Parent = EditorGui
+	CreateCorner(ConfirmPopup, 15)
+
+	local ConfirmText = Instance.new("TextLabel")
+	ConfirmText.Size = UDim2.new(0.9, 0, 0.5, 0)
+	ConfirmText.Position = UDim2.new(0.05, 0, 0.05, 0)
+	ConfirmText.BackgroundTransparency = 1
+	ConfirmText.TextWrapped = true
+	ConfirmText.TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConfirmText.Font = Enum.Font.GothamBold
+	ConfirmText.ZIndex = 9999999
+	ConfirmText.Parent = ConfirmPopup
+
+	local function makeConfirmBtn(text, posX, color)
+		local b = Instance.new("TextButton")
+		b.Size = UDim2.new(0.4, 0, 0.3, 0)
+		b.Position = UDim2.new(posX, 0, 0.6, 0)
+		b.BackgroundColor3 = color
+		b.Text = text
+		b.TextColor3 = Color3.fromRGB(255, 255, 255)
+		b.Font = Enum.Font.GothamBold
+		b.ZIndex = 9999999
+		b.Parent = ConfirmPopup
+		CreateCorner(b, 8)
+		return b
+	end
+	local ConfirmYesBtn = makeConfirmBtn("确定", 0.06, Color3.fromRGB(200, 50, 50))
+	local ConfirmNoBtn  = makeConfirmBtn("取消", 0.54, Color3.fromRGB(80, 80, 80))
+
+	local currentYesConn, currentNoConn
+	local function ShowConfirm(text, onYes)
+		ConfirmText.Text = text
+		ConfirmPopup.Visible = true
+		if currentYesConn then currentYesConn:Disconnect() end
+		if currentNoConn then currentNoConn:Disconnect() end
+		currentYesConn = ConfirmYesBtn.MouseButton1Click:Connect(function()
+			ConfirmPopup.Visible = false
+			if currentYesConn then currentYesConn:Disconnect() end
+			if currentNoConn then currentNoConn:Disconnect() end
+			if onYes then onYes() end
+		end)
+		currentNoConn = ConfirmNoBtn.MouseButton1Click:Connect(function()
+			ConfirmPopup.Visible = false
+			if currentYesConn then currentYesConn:Disconnect() end
+			if currentNoConn then currentNoConn:Disconnect() end
+		end)
+	end
+
+	local function createPanel(titleText, width)
+		local panel = Instance.new("Frame")
+		panel.Size = UDim2.new(0, width or 240, 0, 250)
+		panel.Position = UDim2.new(0.5, -(width or 240)/2, 0.5, -125)
+		panel.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+		panel.BackgroundTransparency = 0.4
+		panel.Visible = false
+		panel.Active = true
+		panel.Parent = EditorGui
+		CreateCorner(panel, 20)
+		MakeDraggable(panel, false)
+
+		local title = Instance.new("TextLabel")
+		title.Size = UDim2.new(1, 0, 0, 25)
+		title.BackgroundTransparency = 1
+		title.Text = titleText
+		title.TextColor3 = Color3.fromRGB(255, 255, 255)
+		title.Font = Enum.Font.GothamBold
+		title.TextSize = 13
+		title.Parent = panel
+
+		local scroll = Instance.new("ScrollingFrame")
+		scroll.Size = UDim2.new(1, -10, 1, -35)
+		scroll.Position = UDim2.new(0, 5, 0, 30)
+		scroll.BackgroundTransparency = 1
+		scroll.ScrollBarThickness = 4
+		scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+		scroll.Parent = panel
+
+		local layout = Instance.new("UIListLayout")
+		layout.Padding = UDim.new(0, 5)
+		layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		layout.Parent = scroll
+		layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+			scroll.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 10)
+		end)
+		return panel, scroll, title
+	end
+
+	local TrashPanel, TrashScroll, TrashTitle = createPanel("已删除的界面", 240)
+	local LoadPanel, LoadScroll, LoadTitle    = createPanel("选择存档文件", 280)
+	local SplitPanel, SplitScroll, SplitTitle = createPanel("拆分选择", 280)
+
+	local ActionPopup = Instance.new("Frame")
+	ActionPopup.Size = UDim2.new(0, 415, 0, 50)
+	ActionPopup.Position = UDim2.new(0.5, -207, 0.15, 0)
+	ActionPopup.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+	ActionPopup.BackgroundTransparency = 0.4
+	ActionPopup.Active = true
+	ActionPopup.Visible = false
+	ActionPopup.Parent = EditorGui
+	CreateCorner(ActionPopup, "100%")
+	MakeDraggable(ActionPopup, true)
+
+	local function createActionButton(name, pos, width, color)
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(0, width, 0, 40)
+		btn.Position = UDim2.new(0, pos, 0, 5)
+		btn.BackgroundColor3 = color
+		btn.BackgroundTransparency = 0.4
+		btn.Text = name
+		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		btn.Font = Enum.Font.GothamBold
+		btn.TextSize = 12
+		btn.Parent = ActionPopup
+		CreateCorner(btn, "100%")
+		return btn
+	end
+
+	local BtnLock   = createActionButton("🔓",     5, 35, Color3.fromRGB(60, 60, 70))
+	local BtnSplit  = createActionButton("拆分",   45, 55, Color3.fromRGB(150, 80, 200))
+	local BtnPlus   = createActionButton("放大",   105, 60, Color3.fromRGB(50, 150, 255))
+	local BtnMinus  = createActionButton("缩小",   170, 60, Color3.fromRGB(50, 150, 255))
+	local BtnDelete = createActionButton("删除",   235, 80, Color3.fromRGB(255, 50, 50))
+	local BtnExit   = createActionButton("退出",   320, 85, Color3.fromRGB(200, 40, 40))
+
+	local SelectionFrame = Instance.new("Frame")
+	SelectionFrame.Name = "PerfectUI_SelectionFrame"
+	SelectionFrame.BackgroundTransparency = 1
+	SelectionFrame.Visible = false
+	SelectionFrame.ZIndex = 999999
+	SelectionFrame.Active = false
+	pcall(function() SelectionFrame.Interactable = false end)
+	SelectionFrame.Parent = EditorGui
+
+	local SelectionStroke = Instance.new("UIStroke")
+	SelectionStroke.Color = Color3.fromRGB(0, 255, 255)
+	SelectionStroke.Thickness = 2
+	SelectionStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	SelectionStroke.Parent = SelectionFrame
+
+	local function ClearSelection()
+		SelectedElement = nil
+		SelectedCluster = {}
+		isDraggingElement = false
+		SelectionFrame.Visible = false
+	end
+
+	RunService:BindToRenderStep("OmniTracker_Enforce", 2000, function()
+		if EditModeActive and SelectedElement and SelectedElement.Parent and SelectedElement.Visible then
+			SelectionFrame.Visible = true
+			SelectionFrame.Size = UDim2.new(0, SelectedElement.AbsoluteSize.X, 0, SelectedElement.AbsoluteSize.Y)
+			SelectionFrame.Position = UDim2.new(0, SelectedElement.AbsolutePosition.X, 0, SelectedElement.AbsolutePosition.Y)
+		else
+			SelectionFrame.Visible = false
+		end
+
+		if not next(RuleMap) then return end
+
+		for obj, key in pairs(KnownTrackedObjects) do
+			if not obj.Parent then
+				KnownTrackedObjects[obj] = nil
+			else
+				local rule = RuleMap[key]
+				if not rule then
+					KnownTrackedObjects[obj] = nil
+				elseif rule.IsDeleted then
+					if obj.Visible then obj.Visible = false end
+				else
+					local parent = obj.Parent
+					if parent and not parent:GetAttribute("Baked_Layout") then
+						local layout = parent:FindFirstChildWhichIsA("UILayout") or parent:FindFirstChildWhichIsA("UIGridStyleLayout")
+						if layout and parent.AbsoluteSize.X > 0 then
+							local ready, cache = true, {}
+							for _, child in ipairs(parent:GetChildren()) do
+								if child:IsA("GuiObject") then
+									if child.AbsoluteSize.X == 0 and child.Visible then ready = false break end
+									if child.Visible then
+										cache[child] = { X=child.AbsolutePosition.X, Y=child.AbsolutePosition.Y, W=child.AbsoluteSize.X, H=child.AbsoluteSize.Y }
+									end
+								end
+							end
+							if ready then
+								parent:SetAttribute("Baked_Layout", true)
+								for c in pairs(cache) do
+									local cKey = GetKey(c)
+									if not OriginalPositions[cKey] then
+										OriginalPositions[cKey] = c.Position
+										OriginalSizes[cKey] = c.Size
+									end
+								end
+								for c, d in pairs(cache) do c.Size = UDim2.new(0, d.W, 0, d.H) end
+								layout:Destroy()
+								local pX, pY = parent.AbsolutePosition.X, parent.AbsolutePosition.Y
+								if parent:IsA("ScrollingFrame") then
+									pX = pX - parent.CanvasPosition.X
+									pY = pY - parent.CanvasPosition.Y
+								end
+								for c, d in pairs(cache) do
+									local aX, aY = c.AnchorPoint.X, c.AnchorPoint.Y
+									local bakedPos = UDim2.new(0, (d.X - pX) + (aX * d.W), 0, (d.Y - pY) + (aY * d.H))
+									c.Position = bakedPos
+									local cKey = GetKey(c)
+									OriginalPositions[cKey] = bakedPos
+									OriginalSizes[cKey] = UDim2.new(0, d.W, 0, d.H)
+								end
+							end
+						elseif not layout then
+							parent:SetAttribute("Baked_Layout", true)
+						end
+					end
+
+					local isBeingDragged = false
+					if isDraggingElement then
+						for _, clusterEl in ipairs(SelectedCluster) do
+							if clusterEl == obj then isBeingDragged = true break end
+						end
+					end
+
+					if not isBeingDragged then
+						pcall(function()
+							if rule.Detached then
+								local curAbs = obj.AbsolutePosition
+								if rule.FrozenAbsX and rule.FrozenAbsY then
+									local dX = rule.FrozenAbsX - curAbs.X
+									local dY = rule.FrozenAbsY - curAbs.Y
+									if math.abs(dX) > 0.1 or math.abs(dY) > 0.1 then
+										obj.Position = UDim2.new(
+											obj.Position.X.Scale, obj.Position.X.Offset + dX,
+											obj.Position.Y.Scale, obj.Position.Y.Offset + dY
+										)
+										rule.Position = obj.Position
+									end
+								else
+									rule.FrozenAbsX = curAbs.X
+									rule.FrozenAbsY = curAbs.Y
+								end
+							else
+								if obj.Position ~= rule.Position then obj.Position = rule.Position end
+							end
+							if rule.SizeModified and obj.Size ~= rule.Size then obj.Size = rule.Size end
+						end)
+					end
+				end
+			end
+		end
+	end)
+
+	local GameID = tostring(game.GameId > 0 and game.GameId or game.PlaceId)
+	local FolderName = "PerfectUIManager_Configs"
+	local CleanGameName = "UnknownGame"
+	local UpdateTrashUI
+
+	pcall(function()
+		local info = MarketplaceService:GetProductInfo(game.PlaceId)
+		if info and info.Name then CleanGameName = string.gsub(info.Name, '[\\/:*?"<>|]', '') end
+	end)
+
+	local function SafeMakeFolder()
+		if makefolder and not isfolder(FolderName) then pcall(function() makefolder(FolderName) end) end
+	end
+
+	local function GetAutoExecuteData()
+		local path = FolderName .. "/AutoExecuteData.json"
+		if isfile and isfile(path) then
+			local ok, data = pcall(function() return HttpService:JSONDecode(readfile(path)) end)
+			if ok and type(data) == "table" then return data end
+		end
+		return {}
+	end
+
+	local function SaveAutoExecuteData(data)
+		local path = FolderName .. "/AutoExecuteData.json"
+		if writefile then pcall(function() writefile(path, HttpService:JSONEncode(data)) end) end
+	end
+
+	local function LoadSpecificFile(filePath)
+		local ok, result = pcall(function() return HttpService:JSONDecode(readfile(filePath)) end)
+		if ok and result then
+			for key, savedData in pairs(result) do
+				RuleMap[key] = {
+					Name = savedData.Name,
+					IsDeleted = savedData.IsDeleted,
+					Position = UDim2.new(unpack(savedData.Position)),
+					Size = UDim2.new(unpack(savedData.Size)),
+					SizeModified = savedData.SizeModified or false,
+					Detached = savedData.Detached or false,
+					FrozenAbsX = savedData.FrozenAbsX,
+					FrozenAbsY = savedData.FrozenAbsY,
+				}
+			end
+			ForceScanUI()
+			if UpdateTrashUI then UpdateTrashUI() end
+
+			task.spawn(function()
+				task.wait(1.2)
+
+				for key, rule in pairs(RuleMap) do
+					if not rule.Detached then
+						for obj, k in pairs(KnownTrackedObjects) do
+							if k == key and obj.Parent then
+								pcall(function()
+									obj.Position = rule.Position
+									if rule.SizeModified then obj.Size = rule.Size end
+								end)
+							end
+						end
+					end
+				end
+
+				for key, rule in pairs(RuleMap) do
+					if rule.Detached then
+						for obj, k in pairs(KnownTrackedObjects) do
+							if k == key and obj.Parent then
+								pcall(function()
+									local parent = obj.Parent
+									local pAbs = (parent and parent:IsA("GuiObject")) and parent.AbsolutePosition or Vector2.new(0, 0)
+									if parent and parent:IsA("ScrollingFrame") then
+										pAbs = Vector2.new(pAbs.X - parent.CanvasPosition.X, pAbs.Y - parent.CanvasPosition.Y)
+									end
+
+									if rule.FrozenAbsX and rule.FrozenAbsY then
+										local aX, aY = obj.AnchorPoint.X, obj.AnchorPoint.Y
+										local w, h = obj.AbsoluteSize.X, obj.AbsoluteSize.Y
+										obj.Position = UDim2.new(
+											0, (rule.FrozenAbsX - pAbs.X) + aX * w,
+											0, (rule.FrozenAbsY - pAbs.Y) + aY * h
+										)
+									else
+										obj.Position = rule.Position
+									end
+									if rule.SizeModified then obj.Size = rule.Size end
+								end)
+							end
+						end
+					end
+				end
+			end)
+
+			LoadPanel.Visible = false
+			WindUI:Notify({ Title = T("提示", "Notice"), Content = T("配置已读取", "Config loaded"), Duration = 3 })
+		end
+	end
+
+	local function RefreshLoadMenu()
+		if not listfiles then return end
+		for _, child in pairs(LoadScroll:GetChildren()) do if child:IsA("Frame") then child:Destroy() end end
+
+		local files = listfiles(FolderName)
+		local foundSaves = false
+		local autoData = GetAutoExecuteData()
+
+		for _, file in ipairs(files) do
+			if string.find(file, GameID .. ".json") then
+				foundSaves = true
+				local displayName = file:match("([^/]+)_" .. GameID .. ".json$")
+
+				local row = Instance.new("Frame")
+				row.Size = UDim2.new(0.95, 0, 0, 30)
+				row.BackgroundTransparency = 1
+				row.Parent = LoadScroll
+
+				local loadBtn = Instance.new("TextButton")
+				loadBtn.Size = UDim2.new(0.55, 0, 1, 0)
+				loadBtn.BackgroundColor3 = Color3.fromRGB(200, 150, 0)
+				loadBtn.BackgroundTransparency = 0.4
+				loadBtn.Text = "📥 读取：" .. (displayName or "存档")
+				loadBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+				loadBtn.Font = Enum.Font.GothamBold
+				loadBtn.TextSize = 10
+				loadBtn.TextScaled = true
+				loadBtn.Parent = row
+				CreateCorner(loadBtn, "100%")
+
+				local isAuto = (autoData[GameID] == file)
+				local autoBtn = Instance.new("TextButton")
+				autoBtn.Size = UDim2.new(0.24, 0, 1, 0)
+				autoBtn.Position = UDim2.new(0.58, 0, 0, 0)
+				autoBtn.BackgroundColor3 = isAuto and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(80, 80, 100)
+				autoBtn.BackgroundTransparency = 0.4
+				autoBtn.Text = isAuto and "自动：开" or "自动：关"
+				autoBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+				autoBtn.Font = Enum.Font.GothamBold
+				autoBtn.TextSize = 10
+				autoBtn.Parent = row
+				CreateCorner(autoBtn, "100%")
+
+				local delFileBtn = Instance.new("TextButton")
+				delFileBtn.Size = UDim2.new(0.15, 0, 1, 0)
+				delFileBtn.Position = UDim2.new(0.85, 0, 0, 0)
+				delFileBtn.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+				delFileBtn.BackgroundTransparency = 0.4
+				delFileBtn.Text = "🗑️"
+				delFileBtn.Parent = row
+				CreateCorner(delFileBtn, "100%")
+
+				loadBtn.MouseButton1Click:Connect(function() LoadSpecificFile(file) end)
+				autoBtn.MouseButton1Click:Connect(function()
+					local cur = GetAutoExecuteData()
+					if cur[GameID] == file then cur[GameID] = nil else cur[GameID] = file end
+					SaveAutoExecuteData(cur)
+					RefreshLoadMenu()
+				end)
+				delFileBtn.MouseButton1Click:Connect(function()
+					ShowConfirm("确定要删除这个设置吗？", function()
+						if delfile then pcall(function() delfile(file) end) end
+						RefreshLoadMenu()
+					end)
+				end)
+			end
+		end
+		LoadTitle.Text = foundSaves and "选择存档文件" or "本游戏暂无存档！"
+	end
+
+	UpdateTrashUI = function()
+		for _, child in pairs(TrashScroll:GetChildren()) do if child:IsA("TextButton") then child:Destroy() end end
+		local delCount = 0
+		for key, data in pairs(RuleMap) do
+			if data.IsDeleted then
+				delCount = delCount + 1
+				local restoreBtn = Instance.new("TextButton")
+				restoreBtn.Size = UDim2.new(0.95, 0, 0, 30)
+				restoreBtn.BackgroundColor3 = Color3.fromRGB(40, 100, 200)
+				restoreBtn.BackgroundTransparency = 0.4
+				restoreBtn.Text = "  ↺ 恢复：" .. (data.Name or "元素")
+				restoreBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+				restoreBtn.Font = Enum.Font.GothamBold
+				restoreBtn.TextSize = 12
+				restoreBtn.TextXAlignment = Enum.TextXAlignment.Left
+				restoreBtn.Parent = TrashScroll
+				CreateCorner(restoreBtn, "100%")
+
+				restoreBtn.MouseButton1Click:Connect(function()
+					for obj, matchedKey in pairs(KnownTrackedObjects) do
+						if matchedKey == key then
+							if obj.Parent then
+								obj.Visible = true
+								if OriginalPositions[key] then obj.Position = OriginalPositions[key] end
+								if OriginalSizes[key] then obj.Size = OriginalSizes[key] end
+							end
+							KnownTrackedObjects[obj] = nil
+						end
+					end
+					RuleMap[key] = nil
+					UpdateTrashUI()
+				end)
+			end
+		end
+		TrashTitle.Text = "已删除的界面 (" .. delCount .. ")"
+	end
+
+	task.spawn(function()
+		SafeMakeFolder()
+		local autoData = GetAutoExecuteData()
+		if autoData[GameID] and isfile(autoData[GameID]) then LoadSpecificFile(autoData[GameID]) end
+	end)
+
+	local activeDragInput, dragStartInputPos = nil, nil
+	local initialClusterPositions = {}
+
+	EditorTab:Section({ Title = T("编辑控制", "Edit Control") })
+
+	EditorToggleRef = EditorTab:Toggle({
+		Flag = "wow_240",
+		Title = T("编辑模式", "Edit Mode"),
+		Value = false,
+		Callback = function(s)
+			EditModeActive = s
+			if s then
+				TapShield.Visible, TapShield.Active, ActionPopup.Visible = true, true, true
+			else
+				TapShield.Visible, TapShield.Active, ActionPopup.Visible = false, false, false
+				SplitPanel.Visible = false
+				ClearSelection()
+				activeDragInput = nil
+			end
+		end,
+	})
+
+	EditorTab:Toggle({
+		Flag = "wow_241",
+		Title = T("锁定菜单", "Lock Menu"),
+		Value = false,
+		Callback = function(s)
+			isMenuLocked = s
+			BtnLock.Text = s and "🔒" or "🔓"
+		end,
+	})
+
+	EditorTab:Button({
+		Title = T("保存配置", "Save Config"),
+		Callback = function()
+			if writefile then
+				SafeMakeFolder()
+				local v = 1
+				local savePath = ""
+				while true do
+					savePath = FolderName .. "/" .. CleanGameName .. "_v" .. v .. "_" .. GameID .. ".json"
+					if not isfile(savePath) then break end
+					v = v + 1
+				end
+				local dataToSave = {}
+				for key, rule in pairs(RuleMap) do
+					dataToSave[key] = {
+						Name = rule.Name,
+						IsDeleted = rule.IsDeleted,
+						Position = { rule.Position.X.Scale, rule.Position.X.Offset, rule.Position.Y.Scale, rule.Position.Y.Offset },
+						Size = { rule.Size.X.Scale, rule.Size.X.Offset, rule.Size.Y.Scale, rule.Size.Y.Offset },
+						SizeModified = rule.SizeModified or false,
+						Detached = rule.Detached or false,
+						FrozenAbsX = rule.FrozenAbsX,
+						FrozenAbsY = rule.FrozenAbsY,
+					}
+				end
+				writefile(savePath, HttpService:JSONEncode(dataToSave))
+				RefreshLoadMenu()
+				WindUI:Notify({ Title = T("提示", "Notice"), Content = T("已保存为 v", "Saved as v") .. v, Duration = 3 })
+			end
+		end,
+	})
+
+	EditorTab:Button({
+		Title = T("读取配置", "Load Config"),
+		Callback = function()
+			TrashPanel.Visible = false
+			SplitPanel.Visible = false
+			LoadPanel.Visible = not LoadPanel.Visible
+			if LoadPanel.Visible then RefreshLoadMenu() end
+		end,
+	})
+
+	EditorTab:Button({
+		Title = T("回收站", "Trash"),
+		Callback = function()
+			LoadPanel.Visible = false
+			SplitPanel.Visible = false
+			TrashPanel.Visible = not TrashPanel.Visible
+			if TrashPanel.Visible then UpdateTrashUI() end
+		end,
+	})
+
+	EditorTab:Button({
+		Title = T("拆分选择", "Split Select"),
+		Callback = function()
+			TrashPanel.Visible = false
+			LoadPanel.Visible = false
+			if SplitPanel.Visible then
+				SplitPanel.Visible = false
+			else
+				if RefreshSplitPanel then
+					RefreshSplitPanel()
+					SplitPanel.Visible = true
+				end
+			end
+		end,
+	})
+
+	EditorTab:Button({
+		Title = T("卸载脚本", "Uninstall"),
+		Callback = function()
+			ShowConfirm("确定要卸载脚本吗？", function()
+				for _, conn in pairs(Connections) do
+					if conn and conn.Connected then conn:Disconnect() end
+				end
+				pcall(function() RunService:UnbindFromRenderStep("OmniTracker_Enforce") end)
+				if ShieldGui then ShieldGui:Destroy() end
+				if EditorGui then EditorGui:Destroy() end
+				KnownTrackedObjects = nil
+				RuleMap = nil
+			end)
+		end,
+	})
+
+	BtnLock.MouseButton1Click:Connect(function()
+		isMenuLocked = not isMenuLocked
+		BtnLock.Text = isMenuLocked and "🔒" or "🔓"
+	end)
+
+	BtnExit.MouseButton1Click:Connect(function()
+		EditModeActive = false
+		TapShield.Visible, TapShield.Active, ActionPopup.Visible = false, false, false
+		SplitPanel.Visible = false
+		ClearSelection()
+		activeDragInput = nil
+		if EditorToggleRef then
+			pcall(function() EditorToggleRef:Set(false) end)
+			pcall(function() EditorToggleRef:SetValue(false) end)
+		end
+		WindUI:Notify({ Title = T("编辑", "Editor"), Content = T("已退出编辑模式", "Exited edit mode"), Duration = 2 })
+	end)
+
+	local function EnsureRuleEntry(obj)
+		local key = GetKey(obj)
+		if not RuleMap[key] then
+			local sz = obj.Size
+			if sz == UDim2.new(0, 0, 0, 0) then
+				sz = UDim2.new(0, obj.AbsoluteSize.X, 0, obj.AbsoluteSize.Y)
+			end
+			RuleMap[key] = {
+				Name = obj.Name,
+				IsDeleted = false,
+				Position = GetSafeVisualPosition(obj),
+				Size = sz,
+				SizeModified = false,
+				Detached = false,
+				FrozenAbsX = nil,
+				FrozenAbsY = nil,
+			}
+		end
+		return key
+	end
+
+	local function DetachElement(obj)
+		local key = EnsureRuleEntry(obj)
+		if RuleMap[key].Detached then return end
+		local abs = obj.AbsolutePosition
+		RuleMap[key].Detached = true
+		RuleMap[key].FrozenAbsX = abs.X
+		RuleMap[key].FrozenAbsY = abs.Y
+		RuleMap[key].Size = UDim2.new(0, obj.AbsoluteSize.X, 0, obj.AbsoluteSize.Y)
+		RuleMap[key].SizeModified = true
+		RuleMap[key].Position = obj.Position
+		KnownTrackedObjects[obj] = key
+	end
+
+	local function MergeElement(obj)
+		local key = EnsureRuleEntry(obj)
+		if not RuleMap[key].Detached then return end
+		RuleMap[key].Detached = false
+		RuleMap[key].FrozenAbsX = nil
+		RuleMap[key].FrozenAbsY = nil
+		RuleMap[key].Position = obj.Position
+		KnownTrackedObjects[obj] = key
+	end
+
+	local RefreshSplitPanel
+
+	RefreshSplitPanel = function()
+		for _, child in pairs(SplitScroll:GetChildren()) do
+			if child:IsA("TextButton") or child:IsA("Frame") then child:Destroy() end
+		end
+
+		if not SelectedElement then
+			SplitTitle.Text = "未选中任何元素"
+			return
+		end
+
+		local candidates, seen = {}, {}
+		local function addCandidate(o)
+			if seen[o] then return end
+			if not o:IsA("GuiObject") then return end
+			if not o.Visible then return end
+			if o.AbsoluteSize.X <= 0 or o.AbsoluteSize.Y <= 0 then return end
+			if o:IsDescendantOf(EditorGui) or o:IsDescendantOf(ShieldGui) then return end
+			if isIgnoredUI(o) then return end
+			seen[o] = true
+			table.insert(candidates, o)
+		end
+		for _, el in ipairs(SelectedCluster) do addCandidate(el) end
+		for _, d in ipairs(SelectedElement:GetDescendants()) do addCandidate(d) end
+		addCandidate(SelectedElement)
+
+		table.sort(candidates, function(a, b)
+			return (a.AbsoluteSize.X * a.AbsoluteSize.Y) < (b.AbsoluteSize.X * b.AbsoluteSize.Y)
+		end)
+
+		SplitTitle.Text = "拆分 (" .. #candidates .. ")"
+
+		for _, obj in ipairs(candidates) do
+			local objKey = GetKey(obj)
+			local isDetached = RuleMap[objKey] and RuleMap[objKey].Detached
+			local isCurrent = (obj == SelectedElement)
+
+			local row = Instance.new("Frame")
+			row.Size = UDim2.new(0.95, 0, 0, 30)
+			row.BackgroundTransparency = 1
+			row.Parent = SplitScroll
+
+			local pickBtn = Instance.new("TextButton")
+			pickBtn.Size = UDim2.new(0.75, 0, 1, 0)
+			pickBtn.BackgroundColor3 = isCurrent and Color3.fromRGB(50, 150, 255)
+									   or (isDetached and Color3.fromRGB(210, 130, 0) or Color3.fromRGB(70, 70, 90))
+			pickBtn.BackgroundTransparency = 0.35
+			pickBtn.Text = (isDetached and "🔓 " or "🔒 ") .. obj.Name .. " · " .. obj.ClassName
+			pickBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+			pickBtn.TextSize = 11
+			pickBtn.Font = Enum.Font.GothamBold
+			pickBtn.TextXAlignment = Enum.TextXAlignment.Left
+			pickBtn.TextTruncate = Enum.TextTruncate.AtEnd
+			pickBtn.Parent = row
+			CreateCorner(pickBtn, "100%")
+
+			pickBtn.MouseButton1Click:Connect(function()
+				EnsureRuleEntry(obj)
+				SelectedElement = obj
+				SelectedCluster = { obj }
+				KnownTrackedObjects[obj] = GetKey(obj)
+				RefreshSplitPanel()
+			end)
+
+			local toggleBtn = Instance.new("TextButton")
+			toggleBtn.Size = UDim2.new(0.22, 0, 1, 0)
+			toggleBtn.Position = UDim2.new(0.78, 0, 0, 0)
+			toggleBtn.BackgroundColor3 = isDetached and Color3.fromRGB(50, 200, 100) or Color3.fromRGB(150, 80, 200)
+			toggleBtn.BackgroundTransparency = 0.35
+			toggleBtn.Text = isDetached and "合并" or "独立"
+			toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+			toggleBtn.Font = Enum.Font.GothamBold
+			toggleBtn.TextSize = 11
+			toggleBtn.Parent = row
+			CreateCorner(toggleBtn, "100%")
+
+			toggleBtn.MouseButton1Click:Connect(function()
+				if RuleMap[objKey] and RuleMap[objKey].Detached then
+					MergeElement(obj)
+				else
+					DetachElement(obj)
+				end
+				SelectedElement = obj
+				SelectedCluster = { obj }
+				RefreshSplitPanel()
+			end)
+		end
+	end
+
+	BtnSplit.MouseButton1Click:Connect(function()
+		TrashPanel.Visible, LoadPanel.Visible = false, false
+		if SplitPanel.Visible then
+			SplitPanel.Visible = false
+		else
+			RefreshSplitPanel()
+			SplitPanel.Visible = true
+		end
+	end)
+
+	local function ModifySize(increment)
+		if SelectedElement and #SelectedCluster > 0 then
+			for _, el in ipairs(SelectedCluster) do
+				local key = EnsureRuleEntry(el)
+				local cur = el.Size
+				if cur == UDim2.new(0, 0, 0, 0) then
+					cur = UDim2.new(0, el.AbsoluteSize.X, 0, el.AbsoluteSize.Y)
+				end
+				RuleMap[key].Size = cur
+				RuleMap[key].SizeModified = true
+				local s = RuleMap[key].Size
+				local ns = UDim2.new(s.X.Scale, s.X.Offset + increment, s.Y.Scale, s.Y.Offset + increment)
+				RuleMap[key].Size = ns
+				el.Size = ns
+				KnownTrackedObjects[el] = key
+			end
+		end
+	end
+
+	BtnPlus.MouseButton1Click:Connect(function() ModifySize(15) end)
+	BtnMinus.MouseButton1Click:Connect(function() ModifySize(-15) end)
+
+	BtnDelete.MouseButton1Click:Connect(function()
+		if SelectedElement and #SelectedCluster > 0 then
+			for _, el in ipairs(SelectedCluster) do
+				local key = EnsureRuleEntry(el)
+				RuleMap[key].IsDeleted = true
+				el.Visible = false
+			end
+			ClearSelection()
+			UpdateTrashUI()
+		end
+	end)
+
+	local function isJoystick(gui)
+		local curr, depth = gui, 0
+		while curr and curr:IsA("GuiObject") and depth < 3 do
+			depth = depth + 1
+			local n = string.lower(curr.Name)
+			if n == "thumbstick" or n == "joystick"
+				or n == "thumbstickframe" or n == "joystickframe"
+				or n:match("^thumbstick%d*$") or n:match("^joystick%d*$") then
+				return true
+			end
+			curr = curr.Parent
+		end
+		return false
+	end
+
+	local function GetPerfectTarget(elementsAtTap, viewport)
+		local maxW, maxH = viewport.X * 0.95, viewport.Y * 0.95
+		local topElement, fallback = nil, nil
+
+		for _, gui in ipairs(elementsAtTap) do
+			if gui:IsDescendantOf(EditorGui) or gui:IsDescendantOf(ShieldGui) then continue end
+			if isIgnoredUI(gui) then continue end
+			if not gui.Visible then continue end
+			if isJoystick(gui) then continue end
+			local s = gui.AbsoluteSize
+			local tooBig = (s.X >= maxW or s.Y >= maxH)
+			local isButton = gui:IsA("GuiButton") or gui:FindFirstChildWhichIsA("TouchTransmitter") ~= nil
+			if isButton and not tooBig then topElement = gui break end
+			if not fallback and not tooBig then
+				if gui.BackgroundTransparency < 1
+					or gui:IsA("ImageLabel") or gui:IsA("TextLabel") or gui:IsA("TextBox") then
+					fallback = gui
+				end
+			end
+		end
+
+		local target = topElement or fallback
+		if not target then return nil end
+
+		local highestValid = target
+		local current = target.Parent
+		local depth = 0
+		while current and current:IsA("GuiObject") and depth < 5 do
+			depth = depth + 1
+			if current.AbsoluteSize.X >= maxW or current.AbsoluteSize.Y >= maxH then break end
+			if isJoystick(current) then break end
+			if isIgnoredUI(current) then break end
+
+			local curKey = GetKey(current)
+			if RuleMap[curKey] and RuleMap[curKey].Detached then break end
+
+			local hasSiblingButton = false
+			for _, child in ipairs(current:GetChildren()) do
+				if child ~= highestValid and child:IsA("GuiObject") and child.Visible then
+					if child:IsA("GuiButton") or child:FindFirstChildWhichIsA("TouchTransmitter") then
+						hasSiblingButton = true
+						break
+					end
+				end
+			end
+			if hasSiblingButton then break end
+			if current.AbsoluteSize.X > highestValid.AbsoluteSize.X * 1.35
+				or current.AbsoluteSize.Y > highestValid.AbsoluteSize.Y * 1.35 then break end
+
+			highestValid = current
+			current = current.Parent
+		end
+		return highestValid
+	end
+
+	local function GetCluster(target)
+		local tKey = GetKey(target)
+		if RuleMap[tKey] and RuleMap[tKey].Detached then
+			return { target }
+		end
+
+		local cluster = { target }
+		local added = { [target] = true }
+
+		if target.Parent then
+			local tX, tY = target.AbsolutePosition.X, target.AbsolutePosition.Y
+			local tW, tH = target.AbsoluteSize.X, target.AbsoluteSize.Y
+			local tCX, tCY = tX + tW / 2, tY + tH / 2
+
+			for _, child in ipairs(target.Parent:GetChildren()) do
+				if child:IsA("GuiObject") and not added[child] and child.Visible then
+					if isIgnoredUI(child) then continue end
+					local cKey = GetKey(child)
+					if not (RuleMap[cKey] and RuleMap[cKey].Detached) then
+						local cW, cH = child.AbsoluteSize.X, child.AbsoluteSize.Y
+						if cW <= 350 and cH <= 350 then
+							local cCX = child.AbsolutePosition.X + cW / 2
+							local cCY = child.AbsolutePosition.Y + cH / 2
+							local dist = math.sqrt((cCX - tCX) ^ 2 + (cCY - tCY) ^ 2)
+							local sizeSimilar = (math.abs(cW - tW) <= 15) and (math.abs(cH - tH) <= 15)
+							if dist <= 5 and sizeSimilar then
+								table.insert(cluster, child)
+								added[child] = true
+							end
+						end
+					end
+				end
+			end
+		end
+
+		local parent = target.Parent
+		if parent and parent:IsA("GuiObject") and not added[parent] then
+			local pKey = GetKey(parent)
+			if not (RuleMap[pKey] and RuleMap[pKey].Detached) and not isIgnoredUI(parent) then
+				local pW, pH = parent.AbsoluteSize.X, parent.AbsoluteSize.Y
+				if pW <= target.AbsoluteSize.X * 1.15 and pH <= target.AbsoluteSize.Y * 1.15 then
+					table.insert(cluster, parent)
+					added[parent] = true
+				end
+			end
+		end
+
+		local pureCluster = {}
+		for _, el in ipairs(cluster) do
+			local isChild = false
+			for _, other in ipairs(cluster) do
+				if el ~= other and el:IsDescendantOf(other) then isChild = true break end
+			end
+			if not isChild then table.insert(pureCluster, el) end
+		end
+		return pureCluster
+	end
+
+	table.insert(Connections, UIS.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			if ConfirmPopup.Visible then return end
+			if not isMenuLocked then isDraggingElement = false; activeDragInput = nil end
+
+			local guis = { TrashPanel, LoadPanel, ActionPopup, SplitPanel }
+			for _, ui in ipairs(guis) do
+				if ui.Visible then
+					local p, s, pos = ui.AbsolutePosition, ui.AbsoluteSize, input.Position
+					if pos.X >= p.X and pos.X <= p.X + s.X and pos.Y >= p.Y and pos.Y <= p.Y + s.Y then return end
+				end
+			end
+			if not EditModeActive then return end
+
+			TapShield.Visible, SelectionFrame.Visible = false, false
+
+			local ok, elementsAtTap = pcall(function()
+				return PlayerGui:GetGuiObjectsAtPosition(input.Position.X, input.Position.Y)
+			end)
+			local validElement = nil
+			if ok and elementsAtTap then
+				validElement = GetPerfectTarget(elementsAtTap, workspace.CurrentCamera.ViewportSize)
+			end
+
+			TapShield.Visible = true
+
+			if validElement then
+				SelectedElement = validElement
+				SelectedCluster = GetCluster(validElement)
+				isDraggingElement = true
+				activeDragInput = input
+				dragStartInputPos = input.Position
+				initialClusterPositions = {}
+
+				for _, el in ipairs(SelectedCluster) do
+					local key = EnsureRuleEntry(el)
+					local currentVisualPos = GetSafeVisualPosition(el)
+					local currentVisualSize = el.Size
+					if currentVisualSize == UDim2.new(0, 0, 0, 0) then
+						currentVisualSize = UDim2.new(0, el.AbsoluteSize.X, 0, el.AbsoluteSize.Y)
+					end
+					if not OriginalPositions[key] then
+						OriginalPositions[key] = currentVisualPos
+						OriginalSizes[key] = currentVisualSize
+					end
+					initialClusterPositions[el] = RuleMap[key].Position
+					KnownTrackedObjects[el] = key
+					el.Position = RuleMap[key].Position
+				end
+				if SplitPanel.Visible then RefreshSplitPanel() end
+			else
+				ClearSelection()
+			end
+		end
+	end))
+
+	table.insert(Connections, UIS.InputChanged:Connect(function(input)
+		if isDraggingElement and SelectedElement and input == activeDragInput
+			and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			pcall(function()
+				local totalDelta = input.Position - dragStartInputPos
+				for _, el in ipairs(SelectedCluster) do
+					local key = GetKey(el)
+					local startPos = initialClusterPositions[el]
+					if startPos then
+						local newPos = UDim2.new(
+							startPos.X.Scale, startPos.X.Offset + totalDelta.X,
+							startPos.Y.Scale, startPos.Y.Offset + totalDelta.Y
+						)
+						local rule = RuleMap[key]
+						if rule then
+							rule.Position = newPos
+						end
+						el.Position = newPos
+						if rule and rule.Detached then
+							rule.FrozenAbsX = el.AbsolutePosition.X
+							rule.FrozenAbsY = el.AbsolutePosition.Y
+						end
+					end
+				end
+			end)
+		end
+	end))
+
+	table.insert(Connections, UIS.InputEnded:Connect(function(input)
+		if input == activeDragInput
+			and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+			isDraggingElement = false
+			activeDragInput = nil
+		end
+	end))
+end
 AimTab:Section({ Title = T("命中框", "Hitbox") })
+if getgenv()._uiRenderConn then
+	getgenv()._uiRenderConn:Disconnect()
+	getgenv()._uiRenderConn = nil
+end
 
+AimTab:Toggle({
+	Flag = "wow_207",
+	Title = T("启用UI渲染", "Enable UI Render"),
+	Value = false,
+	Callback = function(s) getgenv()._uiRenderOn = s end,
+})
+
+AimTab:Slider({
+	Flag = "wow_198",
+	Title = T("渐变速度", "Gradient Speed"),
+	Value = { Min = 1, Max = 30, Default = 5 },
+	Step = 1,
+	Callback = function(v) getgenv()._uiGradSpeed = v / 5 end,
+})
+
+AimTab:Toggle({
+	Flag = "wow_220",
+	Title = T("启用准星", "Enable Crosshair"),
+	Value = false,
+	Callback = function(s) getgenv()._on_Crosshair = s end,
+})
+AimTab:Colorpicker({
+	Flag = "wow_195",
+	Title = T("准星颜色", "Crosshair Color"),
+	Default = Color3.fromRGB(0, 255, 255),
+	Callback = function(c) getgenv()._color_Crosshair = c end,
+})
+AimTab:Toggle({
+	Flag = "wow_197",
+	Title = T("准星渐变", "Crosshair Gradient"),
+	Value = false,
+	Callback = function(s) getgenv()._grad_Crosshair = s end,
+})
+AimTab:Slider({
+	Flag = "wow_196",
+	Title = T("准星大小", "Crosshair Size"),
+	Value = { Min = 1, Max = 500, Default = 100 },
+	Step = 1,
+	Callback = function(v) getgenv()._crosshairScale = v / 100 end,
+})
+
+AimTab:Toggle({
+	Flag = "wow_221",
+	Title = T("启用物品栏", "Enable ItemBar"),
+	Value = false,
+	Callback = function(s) getgenv()._on_ItemBar = s end,
+})
+AimTab:Colorpicker({
+	Flag = "wow_199",
+	Title = T("物品栏颜色", "ItemBar Color"),
+	Default = Color3.fromRGB(0, 255, 255),
+	Callback = function(c) getgenv()._color_ItemBar = c end,
+})
+AimTab:Toggle({
+	Flag = "wow_200",
+	Title = T("物品栏渐变", "ItemBar Gradient"),
+	Value = false,
+	Callback = function(s) getgenv()._grad_ItemBar = s end,
+})
+
+AimTab:Toggle({
+	Flag = "wow_222",
+	Title = T("启用开火按钮", "Enable Fire Button"),
+	Value = false,
+	Callback = function(s) getgenv()._on_Fire = s end,
+})
+AimTab:Colorpicker({
+	Flag = "wow_201",
+	Title = T("开火按钮颜色", "Fire Button Color"),
+	Default = Color3.fromRGB(0, 255, 255),
+	Callback = function(c) getgenv()._color_Fire = c end,
+})
+AimTab:Toggle({
+	Flag = "wow_202",
+	Title = T("开火按钮渐变", "Fire Button Gradient"),
+	Value = false,
+	Callback = function(s) getgenv()._grad_Fire = s end,
+})
+
+AimTab:Toggle({
+	Flag = "wow_223",
+	Title = T("启用换弹按钮", "Enable Reload Button"),
+	Value = false,
+	Callback = function(s) getgenv()._on_Reload = s end,
+})
+AimTab:Colorpicker({
+	Flag = "wow_203",
+	Title = T("换弹按钮颜色", "Reload Button Color"),
+	Default = Color3.fromRGB(0, 255, 255),
+	Callback = function(c) getgenv()._color_Reload = c end,
+})
+AimTab:Toggle({
+	Flag = "wow_204",
+	Title = T("换弹按钮渐变", "Reload Button Gradient"),
+	Value = false,
+	Callback = function(s) getgenv()._grad_Reload = s end,
+})
+
+AimTab:Toggle({
+	Flag = "wow_224",
+	Title = T("启用瞄准按钮", "Enable Aim Button"),
+	Value = false,
+	Callback = function(s) getgenv()._on_Aim = s end,
+})
+AimTab:Colorpicker({
+	Flag = "wow_205",
+	Title = T("瞄准按钮颜色", "Aim Button Color"),
+	Default = Color3.fromRGB(0, 255, 255),
+	Callback = function(c) getgenv()._color_Aim = c end,
+})
+AimTab:Toggle({
+	Flag = "wow_206",
+	Title = T("瞄准按钮渐变", "Aim Button Gradient"),
+	Value = false,
+	Callback = function(s) getgenv()._grad_Aim = s end,
+})
+
+do
+	local RunService = game:GetService("RunService")
+	local PlayersSvc = game:GetService("Players")
+
+	if getgenv()._uiRenderConn then
+		getgenv()._uiRenderConn:Disconnect()
+		getgenv()._uiRenderConn = nil
+	end
+
+	local origSizes = setmetatable({}, { __mode = "k" })
+	local hues = { Crosshair = 0, ItemBar = 0, Fire = 0, Reload = 0, Aim = 0 }
+
+	local function getPlayerGui()
+		local lp = PlayersSvc.LocalPlayer
+		return lp and lp:FindFirstChild("PlayerGui")
+	end
+
+	local function wowPaintUI(instance, color)
+		if not instance then return end
+		if instance:IsA("GuiObject") then
+			if instance:IsA("ImageLabel") or instance:IsA("ImageButton") then
+				instance.ImageColor3 = color
+			else
+				instance.BackgroundColor3 = color
+			end
+			if instance:IsA("TextLabel") or instance:IsA("TextButton") or instance:IsA("TextBox") then
+				instance.TextColor3 = color
+			end
+		end
+		for _, d in ipairs(instance:GetDescendants()) do
+			if d:IsA("GuiObject") then
+				if d:IsA("ImageLabel") or d:IsA("ImageButton") then
+					d.ImageColor3 = color
+				else
+					d.BackgroundColor3 = color
+				end
+				if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+					d.TextColor3 = color
+				end
+			elseif d:IsA("UIStroke") then
+				d.Color = color
+			end
+		end
+	end
+
+	local function wowApplySize(instance, scale)
+		if not instance:IsA("GuiObject") then return end
+		if not origSizes[instance] then
+			origSizes[instance] = instance.Size
+		end
+		local base = origSizes[instance]
+		instance.Size = UDim2.new(
+			base.X.Scale * scale, base.X.Offset * scale,
+			base.Y.Scale * scale, base.Y.Offset * scale
+		)
+	end
+
+	local function wowApplySizeRecursive(instance, scale)
+		wowApplySize(instance, scale)
+		for _, d in ipairs(instance:GetDescendants()) do
+			if d:IsA("GuiObject") then
+				wowApplySize(d, scale)
+			end
+		end
+	end
+
+	local function resolveColor(key, dt)
+		if getgenv()["_grad_" .. key] then
+			local speed = getgenv()._uiGradSpeed or 1
+			hues[key] = (hues[key] + dt * speed * 0.15) % 1
+			return Color3.fromHSV(hues[key], 1, 1)
+		end
+		return getgenv()["_color_" .. key] or Color3.fromRGB(0, 255, 255)
+	end
+
+	local function getHotbarHolder()
+		local pg = getPlayerGui()
+		local hotbar = pg and pg:FindFirstChild("Hotbar")
+		return hotbar and hotbar:FindFirstChild("Holder")
+	end
+
+	local function getJumpButton()
+		local pg = getPlayerGui()
+		local tg = pg and pg:FindFirstChild("TouchGui")
+		local tcf = tg and tg:FindFirstChild("TouchControlFrame")
+		return tcf and tcf:FindFirstChild("JumpButton")
+	end
+
+	local function getCrosshairContainer()
+		local pg = getPlayerGui()
+		local crosshair = pg and pg:FindFirstChild("Crosshair")
+		return crosshair and crosshair:FindFirstChild("CrosshairContainer")
+	end
+
+	getgenv()._uiRenderConn = RunService.RenderStepped:Connect(function(dt)
+		if not getgenv()._uiRenderOn then return end
+
+		if getgenv()._on_Crosshair then
+			local cc = getCrosshairContainer()
+			if cc then
+				wowPaintUI(cc, resolveColor("Crosshair", dt))
+				local scale = getgenv()._crosshairScale or 1
+				if scale ~= 1 then
+					wowApplySizeRecursive(cc, scale)
+				end
+			end
+		end
+
+		if getgenv()._on_ItemBar then
+			local holder = getHotbarHolder()
+			if holder then
+				local color = resolveColor("ItemBar", dt)
+				for _, child in ipairs(holder:GetChildren()) do
+					if child:IsA("GuiObject") and child.Name:match("^ItemButton") then
+						wowPaintUI(child, color)
+					end
+				end
+			end
+		end
+
+		local jb = getJumpButton()
+		if jb then
+			if getgenv()._on_Fire then
+				local fire = jb:FindFirstChild("5")
+				if fire then wowPaintUI(fire, resolveColor("Fire", dt)) end
+			end
+			if getgenv()._on_Reload then
+				local reload = jb:FindFirstChild("6")
+				if reload then wowPaintUI(reload, resolveColor("Reload", dt)) end
+			end
+			if getgenv()._on_Aim then
+				local aim = jb:FindFirstChild("4")
+				if aim then wowPaintUI(aim, resolveColor("Aim", dt)) end
+			end
+		end
+	end)
+end
 AimTab:Toggle({
 	Flag = "wow_052",
 	Title = T("枪械范围", "Gun Range"),
