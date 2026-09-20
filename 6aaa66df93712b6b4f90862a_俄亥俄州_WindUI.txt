@@ -6063,6 +6063,355 @@ do
 		end
 	end))
 end
+CrosshairTab = Window:Tab({ Title = T("准星", "Crosshair"), Icon = "crosshair" })
+
+CrosshairTab:Section({ Title = T("自定义准星", "Custom Crosshair") })
+
+getgenv()._ch = {
+	Enabled = true,
+	Shape = "十字",
+	Color = Color3.fromRGB(0, 255, 255),
+	Length = 8,
+	Thickness = 2,
+	Gap = 6,
+	Transparency = 0.3,
+	DotSize = 2,
+	DotTransparency = 0.3,
+	PulseSpeed = 3,
+	PulseRange = 2,
+	Outline = true,
+	OutlineColor = Color3.fromRGB(0, 0, 0),
+	OutlineThickness = 1,
+	FollowAim = true,
+	OffsetX = 0,
+	OffsetY = 0,
+}
+
+local function ch()
+	return getgenv()._ch
+end
+
+CrosshairTab:Toggle({
+	Flag = "wow_300",
+	Title = T("启用准星", "Enable Crosshair"),
+	Value = true,
+	Callback = function(s) ch().Enabled = s end,
+})
+
+CrosshairTab:Toggle({
+	Flag = "wow_315",
+	Title = T("跟随瞄准按钮", "Follow Aim Button"),
+	Value = true,
+	Callback = function(s) ch().FollowAim = s end,
+})
+
+CrosshairTab:Dropdown({
+	Flag = "wow_301",
+	Title = T("形状", "Shape"),
+	Value = "十字",
+	Values = { "十字", "圆点", "圆圈", "十字+点", "十字+圈" },
+	Callback = function(v) ch().Shape = v end,
+})
+
+CrosshairTab:Colorpicker({
+	Flag = "wow_302",
+	Title = T("颜色", "Color"),
+	Default = Color3.fromRGB(0, 255, 255),
+	Callback = function(c) ch().Color = c end,
+})
+
+CrosshairTab:Slider({
+	Flag = "wow_303",
+	Title = T("线条长度", "Line Length"),
+	Value = { Min = 0, Max = 40, Default = 8 },
+	Step = 1,
+	Callback = function(v) ch().Length = v end,
+})
+
+CrosshairTab:Slider({
+	Flag = "wow_304",
+	Title = T("线条粗细", "Line Thickness"),
+	Value = { Min = 1, Max = 10, Default = 2 },
+	Step = 1,
+	Callback = function(v) ch().Thickness = v end,
+})
+
+CrosshairTab:Slider({
+	Flag = "wow_305",
+	Title = T("中心间距", "Gap"),
+	Value = { Min = 0, Max = 40, Default = 6 },
+	Step = 1,
+	Callback = function(v) ch().Gap = v end,
+})
+
+CrosshairTab:Slider({
+	Flag = "wow_306",
+	Title = T("线条透明度(%)", "Line Transparency"),
+	Value = { Min = 0, Max = 100, Default = 30 },
+	Step = 1,
+	Callback = function(v) ch().Transparency = v / 100 end,
+})
+
+CrosshairTab:Slider({
+	Flag = "wow_307",
+	Title = T("中心点大小", "Dot Size"),
+	Value = { Min = 0, Max = 20, Default = 2 },
+	Step = 1,
+	Callback = function(v) ch().DotSize = v end,
+})
+
+CrosshairTab:Slider({
+	Flag = "wow_308",
+	Title = T("中心点透明度(%)", "Dot Transparency"),
+	Value = { Min = 0, Max = 100, Default = 30 },
+	Step = 1,
+	Callback = function(v) ch().DotTransparency = v / 100 end,
+})
+
+CrosshairTab:Slider({
+	Flag = "wow_309",
+	Title = T("呼吸速度", "Pulse Speed"),
+	Value = { Min = 0, Max = 20, Default = 3 },
+	Step = 1,
+	Callback = function(v) ch().PulseSpeed = v end,
+})
+
+CrosshairTab:Slider({
+	Flag = "wow_310",
+	Title = T("呼吸幅度", "Pulse Range"),
+	Value = { Min = 0, Max = 15, Default = 2 },
+	Step = 1,
+	Callback = function(v) ch().PulseRange = v end,
+})
+
+CrosshairTab:Toggle({
+	Flag = "wow_311",
+	Title = T("描边", "Outline"),
+	Value = true,
+	Callback = function(s) ch().Outline = s end,
+})
+
+CrosshairTab:Colorpicker({
+	Flag = "wow_312",
+	Title = T("描边颜色", "Outline Color"),
+	Default = Color3.fromRGB(0, 0, 0),
+	Callback = function(c) ch().OutlineColor = c end,
+})
+
+CrosshairTab:Slider({
+	Flag = "wow_313",
+	Title = T("描边粗细", "Outline Thickness"),
+	Value = { Min = 0, Max = 5, Default = 1 },
+	Step = 1,
+	Callback = function(v) ch().OutlineThickness = v end,
+})
+
+CrosshairTab:Slider({
+	Flag = "wow_316",
+	Title = T("水平偏移", "Offset X"),
+	Value = { Min = -300, Max = 300, Default = 0 },
+	Step = 1,
+	Callback = function(v) ch().OffsetX = v end,
+})
+
+CrosshairTab:Slider({
+	Flag = "wow_317",
+	Title = T("垂直偏移", "Offset Y"),
+	Value = { Min = -300, Max = 300, Default = 0 },
+	Step = 1,
+	Callback = function(v) ch().OffsetY = v end,
+})
+
+do
+	local PlayersSvc = game:GetService("Players")
+	local RunService = game:GetService("RunService")
+
+	task.spawn(function()
+		local lp = PlayersSvc.LocalPlayer
+		if not lp then return end
+		local pg = lp:WaitForChild("PlayerGui", 15)
+		if not pg then return end
+
+		local old = pg:FindFirstChild("MyCustomCrosshair")
+		if old then old:Destroy() end
+
+		local gui = Instance.new("ScreenGui")
+		gui.Name = "MyCustomCrosshair"
+		gui.ResetOnSpawn = false
+		gui.IgnoreGuiInset = true
+		gui.DisplayOrder = 100000
+		gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+		gui.Parent = pg
+
+		local holder = Instance.new("Frame")
+		holder.BackgroundTransparency = 1
+		holder.AnchorPoint = Vector2.new(0.5, 0.5)
+		holder.Position = UDim2.fromScale(0.5, 0.5)
+		holder.Size = UDim2.fromOffset(1, 1)
+		holder.ZIndex = 9999
+		holder.Parent = gui
+
+		local function makeLine()
+			local parent = Instance.new("Frame")
+			parent.BackgroundTransparency = 1
+			parent.AnchorPoint = Vector2.new(0.5, 0.5)
+			parent.Position = UDim2.fromScale(0.5, 0.5)
+			parent.ZIndex = 9999
+			parent.Parent = holder
+
+			local line = Instance.new("Frame")
+			line.BorderSizePixel = 0
+			line.AnchorPoint = Vector2.new(0.5, 0.5)
+			line.Position = UDim2.fromScale(0.5, 0.5)
+			line.Size = UDim2.fromScale(1, 1)
+			line.ZIndex = 10000
+			line.Parent = parent
+
+			local stroke = Instance.new("UIStroke")
+			stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			stroke.LineJoinMode = Enum.LineJoinMode.Miter
+			stroke.Parent = line
+
+			return parent, line, stroke
+		end
+
+		local topP, topL, topS = makeLine()
+		local bottomP, bottomL, bottomS = makeLine()
+		local leftP, leftL, leftS = makeLine()
+		local rightP, rightL, rightS = makeLine()
+		local dotP, dotL, dotS = makeLine()
+
+		local circle = Instance.new("Frame")
+		circle.BackgroundTransparency = 1
+		circle.AnchorPoint = Vector2.new(0.5, 0.5)
+		circle.Position = UDim2.fromScale(0.5, 0.5)
+		circle.ZIndex = 9999
+		circle.Parent = holder
+
+		local circleCorner = Instance.new("UICorner")
+		circleCorner.CornerRadius = UDim.new(1, 0)
+		circleCorner.Parent = circle
+
+		local circleStroke = Instance.new("UIStroke")
+		circleStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		circleStroke.Parent = circle
+
+		local hidden = setmetatable({}, { __mode = "k" })
+		local function hideVanilla()
+			local crosshair = pg:FindFirstChild("Crosshair")
+			if not crosshair then return end
+			local container = crosshair:FindFirstChild("CrosshairContainer")
+			if not container then return end
+
+			local function hide(instance)
+				if not instance:IsA("GuiObject") then return end
+				if hidden[instance] == nil then
+					hidden[instance] = instance.Visible
+				end
+				instance.Visible = false
+			end
+
+			hide(container)
+			for _, d in ipairs(container:GetDescendants()) do
+				hide(d)
+			end
+		end
+
+		task.spawn(function()
+			hideVanilla()
+			local crosshair = pg:WaitForChild("Crosshair", 15)
+			if crosshair then
+				local container = crosshair:WaitForChild("CrosshairContainer", 15)
+				if container then
+					container.DescendantAdded:Connect(function()
+						task.wait()
+						hideVanilla()
+					end)
+				end
+			end
+		end)
+
+		local function isAimButtonVisible()
+			local touchGui = pg:FindFirstChild("TouchGui")
+			if not touchGui then return false end
+			local tcf = touchGui:FindFirstChild("TouchControlFrame")
+			if not tcf then return false end
+			local jumpButton = tcf:FindFirstChild("JumpButton")
+			if not jumpButton then return false end
+			local aimBtn = jumpButton:FindFirstChild("4")
+			if not aimBtn then return false end
+			return aimBtn.Visible and aimBtn.AbsoluteSize.X > 0 and aimBtn.AbsoluteSize.Y > 0
+		end
+
+		local t = 0
+		RunService.RenderStepped:Connect(function(dt)
+			local cfg = ch()
+
+			local show = cfg.Enabled
+			if cfg.FollowAim and not isAimButtonVisible() then
+				show = false
+			end
+
+			holder.Visible = show
+			if not show then return end
+
+			holder.Position = UDim2.fromScale(0.5, 0.5) + UDim2.fromOffset(cfg.OffsetX or 0, cfg.OffsetY or 0)
+
+			t = t + dt * cfg.PulseSpeed
+			local pulse = math.sin(t) * cfg.PulseRange
+
+			local shape = cfg.Shape
+			local showTop    = shape == "十字" or shape == "十字+点" or shape == "十字+圈"
+			local showDot    = shape == "圆点" or shape == "十字+点"
+			local showCircle = shape == "圆圈" or shape == "十字+圈"
+
+			topP.Visible = showTop
+			bottomP.Visible = showTop
+			leftP.Visible = showTop
+			rightP.Visible = showTop
+
+			if showTop then
+				local len = math.max(0, cfg.Length + pulse)
+				local gap = math.max(0, cfg.Gap + pulse)
+
+				local function setLine(parent, line, stroke, w, h, x, y)
+					parent.Size = UDim2.fromOffset(math.max(w, 0.01), math.max(h, 0.01))
+					parent.Position = UDim2.fromScale(0.5, 0.5) + UDim2.fromOffset(x, y)
+					line.BackgroundColor3 = cfg.Color
+					line.BackgroundTransparency = cfg.Transparency
+					stroke.Color = cfg.OutlineColor
+					stroke.Thickness = cfg.Outline and cfg.OutlineThickness or 0
+					stroke.Transparency = cfg.Outline and 0 or 1
+				end
+
+				setLine(topP, topL, topS, cfg.Thickness, len, 0, -(gap + len / 2))
+				setLine(bottomP, bottomL, bottomS, cfg.Thickness, len, 0, gap + len / 2)
+				setLine(leftP, leftL, leftS, len, cfg.Thickness, -(gap + len / 2), 0)
+				setLine(rightP, rightL, rightS, len, cfg.Thickness, gap + len / 2, 0)
+			end
+
+			dotP.Visible = showDot and cfg.DotSize > 0
+			if dotP.Visible then
+				dotP.Size = UDim2.fromOffset(cfg.DotSize, cfg.DotSize)
+				dotP.Position = UDim2.fromScale(0.5, 0.5)
+				dotL.BackgroundColor3 = cfg.Color
+				dotL.BackgroundTransparency = cfg.DotTransparency
+				dotS.Color = cfg.OutlineColor
+				dotS.Thickness = cfg.Outline and cfg.OutlineThickness or 0
+				dotS.Transparency = cfg.Outline and 0 or 1
+			end
+
+			circle.Visible = showCircle
+			if showCircle then
+				local radius = (cfg.Gap + cfg.Length + pulse) * 2
+				circle.Size = UDim2.fromOffset(radius, radius)
+				circleStroke.Color = cfg.Color
+				circleStroke.Thickness = cfg.Thickness
+				circleStroke.Transparency = cfg.Transparency
+			end
+		end)
+	end)
+end
 AimTab:Section({ Title = T("命中框", "Hitbox") })
 if getgenv()._uiRenderConn then
 	getgenv()._uiRenderConn:Disconnect()
